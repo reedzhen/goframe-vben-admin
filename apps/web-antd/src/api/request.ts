@@ -65,6 +65,7 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
     fulfilled: async (config) => {
       const accessStore = useAccessStore();
 
+      if (import.meta.env.DEV) config.timeout = 0; // reed 开发环境关闭超时
       config.headers.Authorization = formatToken(accessStore.accessToken);
       config.headers['Accept-Language'] = preferences.app.locale;
       return config;
@@ -98,6 +99,18 @@ function createRequestClient(baseURL: string, options?: RequestClientOptions) {
       // 当前mock接口返回的错误字段是 error 或者 message
       const responseData = error?.response?.data ?? {};
       const errorMessage = responseData?.error ?? responseData?.message ?? '';
+
+      // 处理token过期 - 通过业务code字段判断
+      if (responseData.code === 401) {
+        // 防止重复调用，避免死循环
+        if (!error.__isHandlingAuth) {
+          error.__isHandlingAuth = true;
+          const accessStore = useAccessStore();
+          accessStore.setAccessToken(null);
+        }
+        return;
+      }
+
       // 如果没有错误信息，则会根据状态码进行提示
       message.error(errorMessage || msg);
     }),
